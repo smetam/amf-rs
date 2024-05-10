@@ -1,24 +1,14 @@
-use std::fs::File;
-use csv::Reader;
 use amf::common::{ClassifierTarget, Observation};
 use amf::forest::AMFClassifier;
 use amf::metrics::Accuracy;
-
-
+use csv::Reader;
+use std::fs::File;
 
 fn main() {
     let mut accuracy = Accuracy::new();
-    let mut forest = AMFClassifier::new(
-        10,
-        1.0,
-        true,
-        0.5,
-        false,
-        Some(123),
-    );
+    let mut forest = AMFClassifier::new(10, 1.0, true, 0.5, false, Some(123));
 
     let file_path = "examples/banana.csv";
-
 
     let Ok(file) = File::open(file_path) else {
         panic!("Failed to open")
@@ -65,7 +55,6 @@ fn main() {
         let predicted_class = predicted_class.as_ref().unwrap_or(&default_label);
         accuracy.update(&y, predicted_class);
         forest.learn_one(&x, &y);
-
     }
     // println!("tree: {:?}", forest);
     // forest.trees[0].print_tree();

@@ -1,6 +1,7 @@
+use crate::common::{
+    ClassProbabilities, Classes, ClassifierTarget, Counter, Direction, FeatureRange, Observation,
+};
 use std::collections::HashMap;
-use crate::common::{ClassifierTarget, Counter, ClassProbabilities, Classes, Observation, FeatureRange, Direction};
-
 
 #[derive(Clone, Debug)]
 pub struct Split {
@@ -9,14 +10,6 @@ pub struct Split {
     pub feature: String,
     pub threshold: f64,
 }
-
-// impl Split {
-//     pub fn update_depth(&mut self, depth: usize) {
-//         self.right_child.borrow_mut().update_depth(depth);
-//         self.left_child.borrow_mut().update_depth(depth);
-//     }
-// }
-
 
 #[derive(Clone, Debug)]
 pub struct Node {
@@ -64,14 +57,26 @@ impl Node {
         self.depth = depth;
     }
 
-    pub fn update_weight(&mut self, y: &ClassifierTarget, dirichlet: f64, use_aggregation: bool,  step: f64,  n_classes: usize) {
+    pub fn update_weight(
+        &mut self,
+        y: &ClassifierTarget,
+        dirichlet: f64,
+        use_aggregation: bool,
+        step: f64,
+        n_classes: usize,
+    ) {
         let loss = self.loss(y, dirichlet, n_classes);
         if use_aggregation {
             self.weight -= step * loss;
         }
     }
 
-    pub fn predict(&self, dirichlet: f64, classes: &Classes, n_classes: usize) -> ClassProbabilities {
+    pub fn predict(
+        &self,
+        dirichlet: f64,
+        classes: &Classes,
+        n_classes: usize,
+    ) -> ClassProbabilities {
         let mut scores = ClassProbabilities::new();
         for class in classes {
             let class_score = self.score(class, dirichlet, n_classes);
@@ -91,7 +96,16 @@ impl Node {
         (count + dirichlet) / (self.n_samples as f64 + dirichlet * n_classes as f64)
     }
 
-    pub fn update_downwards(&mut self, x: &Observation, y: &ClassifierTarget, dirichlet: f64, use_aggregation: bool, step: f64, do_update_weight: bool, n_classes: usize) {
+    pub fn update_downwards(
+        &mut self,
+        x: &Observation,
+        y: &ClassifierTarget,
+        dirichlet: f64,
+        use_aggregation: bool,
+        step: f64,
+        do_update_weight: bool,
+        n_classes: usize,
+    ) {
         // Updating the range of the feature values known by the node
         // If it is the first sample, we copy the features vector into the min and max range
         if self.n_samples == 0 {
@@ -131,15 +145,19 @@ impl Node {
         }
     }
 
-    pub fn split(&mut self, left_child: usize, right_child: usize, feature: String, threshold: f64) {
-        self.split = Some(
-            Split {
-                left_child,
-                right_child,
-                feature,
-                threshold,
-            }
-        )
+    pub fn split(
+        &mut self,
+        left_child: usize,
+        right_child: usize,
+        feature: String,
+        threshold: f64,
+    ) {
+        self.split = Some(Split {
+            left_child,
+            right_child,
+            feature,
+            threshold,
+        })
     }
 
     pub fn replant(&mut self, node: &Node) {
@@ -150,18 +168,17 @@ impl Node {
         // self.memory_range_max = node.memory_range_max.clone();
         // self.n_samples = node.n_samples;
         // self.counts = node.counts.clone();
-
     }
 
     pub fn range(&self, feature: &String) -> (f64, f64) {
         return (
             self.memory_range_min.get(feature),
             self.memory_range_max.get(feature),
-        )
+        );
     }
 
     pub fn range_extension(&self, x: &Observation) -> (f64, HashMap<String, f64>) {
-        let mut extensions= HashMap::new();
+        let mut extensions = HashMap::new();
         let mut extensions_sum = 0.0;
         for (feature, &value) in x {
             let (feature_min, feature_max) = self.range(&feature);

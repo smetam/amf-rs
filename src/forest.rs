@@ -1,9 +1,9 @@
-use std::collections::HashSet;
-use crate::common::{Classes, ClassifierTarget, ClassProbabilities, Observation};
+use crate::common::{ClassProbabilities, Classes, ClassifierTarget, Observation};
 use crate::tree::MondrianTreeClassifier;
 use rand::rngs::StdRng;
-use rand::SeedableRng;
 use rand::Rng;
+use rand::SeedableRng;
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct AMFClassifier {
@@ -13,9 +13,8 @@ pub struct AMFClassifier {
     split_pure: bool,
     seed: Option<usize>,
     classes: HashSet<ClassifierTarget>,
-    pub trees: Vec<MondrianTreeClassifier>,
+    trees: Vec<MondrianTreeClassifier>,
     rng: StdRng,
-
 }
 
 impl Default for AMFClassifier {
@@ -68,7 +67,7 @@ impl AMFClassifier {
     }
 
     pub fn n_estimators(&self) -> usize {
-        return self.trees.len();
+        self.trees.len()
     }
 
     pub fn learn_one(&mut self, x: &Observation, y: &ClassifierTarget) {
@@ -101,6 +100,6 @@ impl AMFClassifier {
                 *scores.entry(class.clone()).or_insert(0.) += new_score;
             }
         }
-        return scores;
+        scores
     }
 }

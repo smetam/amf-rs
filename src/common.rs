@@ -1,7 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
-use rand::Rng;
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ClassifierTarget {
@@ -10,19 +8,17 @@ pub enum ClassifierTarget {
     String(String),
 }
 
-
 pub type Observation = HashMap<String, f64>;
 
 #[derive(Debug, Clone)]
 pub struct FeatureRange {
-    pub inner: HashMap<String, f64>
+    inner: HashMap<String, f64>,
 }
-
 
 impl FeatureRange {
     pub fn new() -> Self {
         Self {
-            inner: HashMap::new()
+            inner: HashMap::new(),
         }
     }
 
@@ -81,7 +77,6 @@ pub fn normalize_hashmap_values<K: Eq + Hash + Clone>(map: &HashMap<K, f64>) -> 
     }
     normalized_map
 }
-
 
 /// Computation of log( (e^a + e^b) / 2) in an overflow-proof way
 pub fn log_sum_2_exp(a: f64, b: f64) -> f64 {

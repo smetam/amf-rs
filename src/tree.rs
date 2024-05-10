@@ -1,12 +1,13 @@
-use std::collections::HashMap;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
-use rand::Rng;
-use crate::common::{Classes, ClassifierTarget, ClassProbabilities, Observation, Direction, normalize_hashmap_values, log_sum_2_exp};
+use crate::common::{
+    log_sum_2_exp, normalize_hashmap_values, ClassProbabilities, Classes, ClassifierTarget,
+    Direction, Observation,
+};
 use crate::node::{Node, Split};
-use rand_distr::{Exp, Distribution};
-
-
+use rand::rngs::StdRng;
+use rand::Rng;
+use rand::SeedableRng;
+use rand_distr::{Distribution, Exp};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct MondrianTreeClassifier {
@@ -19,11 +20,10 @@ pub struct MondrianTreeClassifier {
     iteration: usize,
     classes: Classes,
     root: usize,
-    nodes: Vec<Node>,  // To allow removing nodes might be best to store in hashmap
+    nodes: Vec<Node>, // To allow removing nodes might be best to store in hashmap
 }
 
 impl MondrianTreeClassifier {
-
     pub fn new(
         step: f64,
         use_aggregation: bool,
@@ -41,7 +41,7 @@ impl MondrianTreeClassifier {
             iteration: 0,
             classes: Classes::new(),
             root: 0,
-            nodes: vec![Node::new_root()]
+            nodes: vec![Node::new_root()],
         }
     }
 
@@ -63,7 +63,13 @@ impl MondrianTreeClassifier {
 
     fn update_weight(&mut self, node_idx: usize, y: &ClassifierTarget) {
         let node = &mut self.nodes[node_idx];
-        node.update_weight(y, self.dirichlet, self.use_aggregation, self.step, self.classes.len());
+        node.update_weight(
+            y,
+            self.dirichlet,
+            self.use_aggregation,
+            self.step,
+            self.classes.len(),
+        );
     }
 
     fn update_count(&mut self, node_idx: usize, y: &ClassifierTarget) {
@@ -82,10 +88,24 @@ impl MondrianTreeClassifier {
         self.update_depth(split.right_child, depth + 1);
     }
 
-    fn update_downwards(&mut self, x: &Observation, y: &ClassifierTarget, node_idx: usize, do_weight_update: bool) {
+    fn update_downwards(
+        &mut self,
+        x: &Observation,
+        y: &ClassifierTarget,
+        node_idx: usize,
+        do_weight_update: bool,
+    ) {
         let node = &mut self.nodes[node_idx];
         let n_classes = self.classes.len();
-        node.update_downwards(x, y, self.dirichlet, self.use_aggregation, self.step, do_weight_update, n_classes)
+        node.update_downwards(
+            x,
+            y,
+            self.dirichlet,
+            self.use_aggregation,
+            self.step,
+            do_weight_update,
+            n_classes,
+        )
     }
 
     fn exponential(&mut self, extensions_sum: f64) -> f64 {
@@ -94,21 +114,25 @@ impl MondrianTreeClassifier {
         // - (1.0 / extensions_sum) * self.uniform(0., 1.).ln() // todo: to make deterministic, this can be used
     }
 
-    fn compute_split_time(&mut self, y: &ClassifierTarget, node_idx: usize, extensions_sum: f64) -> f64 {
+    fn compute_split_time(
+        &mut self,
+        y: &ClassifierTarget,
+        node_idx: usize,
+        extensions_sum: f64,
+    ) -> f64 {
         let node = &self.nodes[node_idx];
         if !self.split_pure && node.is_dirac(y) {
-            return 0.
+            return 0.;
         }
 
         if extensions_sum > 0. {
-
             let time = self.exponential(extensions_sum);
             // Splitting time of the node (if splitting occurs)
             let node = &self.nodes[node_idx];
             let split_time = time + node.time;
             // If the node is a leaf we must split it
             let Some(split) = &node.split else {
-                return split_time
+                return split_time;
             };
 
             // Otherwise we apply Mondrian process dark magic :)
@@ -116,64 +140,58 @@ impl MondrianTreeClassifier {
             let child_time = self.nodes[split.left_child].time;
             // 2. We check if splitting time occurs before child creation time
             if split_time < child_time {
-                return split_time
+                return split_time;
             }
         }
-        return 0.
+        return 0.;
     }
 
-    fn split_leaf(&mut self, node_idx: usize, split_time: f64, threshold: f64, feature: String, extend: Direction) -> usize {
+    fn split_leaf(
+        &mut self,
+        node_idx: usize,
+        split_time: f64,
+        threshold: f64,
+        feature: String,
+        extend: Direction,
+    ) -> usize {
         // We promote the leaf to a branch
         let left_idx = self.nodes.len();
 
         let node = &mut self.nodes[node_idx];
         let new_depth = node.depth + 1;
-        let mut left = Node::new_leaf(
-            left_idx,
-            Some(node_idx),
-            split_time,
-            new_depth,
-        );
+        let mut left = Node::new_leaf(left_idx, Some(node_idx), split_time, new_depth);
 
         let right_idx = left_idx + 1;
-        let mut right = Node::new_leaf(
-            right_idx,
-            Some(node_idx),
-            split_time,
-            new_depth,
-        );
+        let mut right = Node::new_leaf(right_idx, Some(node_idx), split_time, new_depth);
 
         match extend {
             Direction::Left => right.replant(&node),
             Direction::Right => left.replant(&node),
         };
 
-        node.split(left_idx, right_idx,  feature, threshold);
+        node.split(left_idx, right_idx, feature, threshold);
         self.nodes.push(left);
         self.nodes.push(right);
         node_idx
     }
 
-    fn split_branch(&mut self, node_idx: usize, split_time: f64, threshold: f64, feature: String, extend: Direction) -> usize {
+    fn split_branch(
+        &mut self,
+        node_idx: usize,
+        split_time: f64,
+        threshold: f64,
+        feature: String,
+        extend: Direction,
+    ) -> usize {
         let left_idx = self.nodes.len();
         let node = &mut self.nodes[node_idx];
         let new_depth = node.depth + 1;
         let node_split = node.split.clone().unwrap();
 
-        let mut left = Node::new_leaf(
-            left_idx,
-            Some(node_idx),
-            split_time,
-            new_depth,
-        );
+        let mut left = Node::new_leaf(left_idx, Some(node_idx), split_time, new_depth);
 
         let right_idx = left_idx + 1;
-        let mut right = Node::new_leaf(
-            right_idx,
-            Some(node_idx),
-            split_time,
-            new_depth,
-        );
+        let mut right = Node::new_leaf(right_idx, Some(node_idx), split_time, new_depth);
 
         let (new_parent, parent_idx) = match extend {
             Direction::Left => (&mut left, left_idx),
@@ -184,12 +202,12 @@ impl MondrianTreeClassifier {
 
         // Update the level of the modified nodes.
         let old_left = &self.nodes[node_split.left_child];
-        self.update_depth(old_left.idx,new_depth + 1);
+        self.update_depth(old_left.idx, new_depth + 1);
         let old_left = &mut self.nodes[node_split.left_child];
         old_left.parent = Some(parent_idx);
 
         let old_right = &self.nodes[node_split.right_child];
-        self.update_depth(old_right.idx,new_depth + 1);
+        self.update_depth(old_right.idx, new_depth + 1);
         let old_right = &mut self.nodes[node_split.right_child];
         old_right.parent = Some(parent_idx);
 
@@ -207,26 +225,23 @@ impl MondrianTreeClassifier {
         node_idx
     }
 
-    fn split_branch_new(&mut self, node_idx: usize, split_time: f64, threshold: f64, feature: String, extend: Direction) -> usize {
+    fn split_branch_new(
+        &mut self,
+        node_idx: usize,
+        split_time: f64,
+        threshold: f64,
+        feature: String,
+        extend: Direction,
+    ) -> usize {
         let left_idx = self.nodes.len();
         let node = &mut self.nodes[node_idx];
         let new_depth = node.depth + 1;
         let node_split = node.split.clone().unwrap();
 
-        let mut left = Node::new_leaf(
-            left_idx,
-            Some(node_idx),
-            split_time,
-            new_depth,
-        );
+        let mut left = Node::new_leaf(left_idx, Some(node_idx), split_time, new_depth);
 
         let right_idx = left_idx + 1;
-        let mut right = Node::new_leaf(
-            right_idx,
-            Some(node_idx),
-            split_time,
-            new_depth,
-        );
+        let mut right = Node::new_leaf(right_idx, Some(node_idx), split_time, new_depth);
 
         let (new_parent, parent_idx) = match extend {
             Direction::Right => (&mut left, left_idx),
@@ -237,15 +252,14 @@ impl MondrianTreeClassifier {
 
         // Update the level of the modified nodes.
         let old_left = &self.nodes[node_split.left_child];
-        self.update_depth(old_left.idx,new_depth + 1);
+        self.update_depth(old_left.idx, new_depth + 1);
         let old_left = &mut self.nodes[node_split.left_child];
         old_left.parent = Some(parent_idx);
 
         let old_right = &self.nodes[node_split.right_child];
-        self.update_depth(old_right.idx,new_depth + 1);
+        self.update_depth(old_right.idx, new_depth + 1);
         let old_right = &mut self.nodes[node_split.right_child];
         old_right.parent = Some(parent_idx);
-
 
         new_parent.split(
             node_split.left_child,
@@ -261,7 +275,14 @@ impl MondrianTreeClassifier {
         node_idx
     }
 
-    fn split_branch_new2(&mut self, node_idx: usize, split_time: f64, threshold: f64, feature: String, extend: Direction) -> usize {
+    fn split_branch_new2(
+        &mut self,
+        node_idx: usize,
+        split_time: f64,
+        threshold: f64,
+        feature: String,
+        extend: Direction,
+    ) -> usize {
         let left_idx = self.nodes.len();
         let right_idx = left_idx + 1;
         let node = &self.nodes[node_idx];
@@ -269,44 +290,34 @@ impl MondrianTreeClassifier {
         let node_split = node.split.clone().unwrap();
 
         if extend == Direction::Right {
-            let mut left = Node::new_leaf(
-                left_idx,
-                Some(node_idx),
-                split_time,
-                new_depth,
-            );
+            let mut left = Node::new_leaf(left_idx, Some(node_idx), split_time, new_depth);
 
-            let right = Node::new_leaf(
-                right_idx,
-                Some(node_idx),
-                split_time,
-                new_depth,
-            );
+            let right = Node::new_leaf(right_idx, Some(node_idx), split_time, new_depth);
 
             left.replant(node);
-            left.split(node_split.left_child, node_split.right_child, node_split.feature, node_split.threshold);
+            left.split(
+                node_split.left_child,
+                node_split.right_child,
+                node_split.feature,
+                node_split.threshold,
+            );
 
             self.nodes[node_split.left_child].parent = Some(left.idx);
             self.nodes[node_split.right_child].parent = Some(left.idx);
             self.nodes.push(left);
             self.nodes.push(right);
         } else {
-            let left = Node::new_leaf(
-                left_idx,
-                Some(node_idx),
-                split_time,
-                new_depth,
-            );
+            let left = Node::new_leaf(left_idx, Some(node_idx), split_time, new_depth);
 
-            let mut right = Node::new_leaf(
-                right_idx,
-                Some(node_idx),
-                split_time,
-                new_depth,
-            );
+            let mut right = Node::new_leaf(right_idx, Some(node_idx), split_time, new_depth);
 
             right.replant(node);
-            right.split(node_split.left_child, node_split.right_child, node_split.feature, node_split.threshold);
+            right.split(
+                node_split.left_child,
+                node_split.right_child,
+                node_split.feature,
+                node_split.threshold,
+            );
 
             self.nodes[node_split.left_child].parent = Some(right.idx);
             self.nodes[node_split.right_child].parent = Some(right.idx);
@@ -315,14 +326,21 @@ impl MondrianTreeClassifier {
         }
 
         // Update the level of the modified nodes
-        self.update_depth(node_split.left_child,new_depth + 1);
-        self.update_depth(node_split.right_child,new_depth + 1);
+        self.update_depth(node_split.left_child, new_depth + 1);
+        self.update_depth(node_split.right_child, new_depth + 1);
         // Update split info
         self.nodes[node_idx].split(left_idx, right_idx, feature, threshold);
         node_idx
     }
 
-    fn split(&mut self, node_idx: usize, split_time: f64, threshold: f64, feature: String, extend: Direction) -> usize {
+    fn split(
+        &mut self,
+        node_idx: usize,
+        split_time: f64,
+        threshold: f64,
+        feature: String,
+        extend: Direction,
+    ) -> usize {
         let node = &self.nodes[node_idx];
         if node.is_leaf() {
             self.split_leaf(node_idx, split_time, threshold, feature, extend)
@@ -338,9 +356,7 @@ impl MondrianTreeClassifier {
         // (min + max) / 2.0  // todo: to make deterministic
     }
 
-    fn pick_random_key(
-        &mut self, probabilities: &HashMap<String, f64>,
-    ) -> Option<String> {
+    fn pick_random_key(&mut self, probabilities: &HashMap<String, f64>) -> Option<String> {
         let mut cumulative_prob = 0.0;
         let rand_num: f64 = self.rng.gen();
 
@@ -375,7 +391,7 @@ impl MondrianTreeClassifier {
         }
         loop {
             // Computing the extensions to get the intensities
-            let (extensions_sum, extensions) =  self.nodes[current_idx].range_extension(x);
+            let (extensions_sum, extensions) = self.nodes[current_idx].range_extension(x);
 
             // If it's not the first iteration (otherwise the current node
             // is root with no range), we consider the possibility of a split
@@ -401,13 +417,7 @@ impl MondrianTreeClassifier {
                 };
 
                 // Split the current node.
-                self.split(
-                    current_idx,
-                    split_time,
-                    threshold,
-                    feature,
-                    extend,
-                );
+                self.split(current_idx, split_time, threshold, feature, extend);
 
                 // Update the current node
                 self.update_downwards(x, y, current_idx, true);
@@ -448,9 +458,7 @@ impl MondrianTreeClassifier {
         if let Some(split) = &node.split {
             let left = &self.nodes[split.left_child];
             let right = &self.nodes[split.right_child];
-            new_weight = log_sum_2_exp(
-                node.weight, left.log_weight_tree + right.log_weight_tree
-            )
+            new_weight = log_sum_2_exp(node.weight, left.log_weight_tree + right.log_weight_tree)
         } else {
             new_weight = node.weight
         };
@@ -471,12 +479,10 @@ impl MondrianTreeClassifier {
                 return;
             };
             current_idx = parent_idx
-
         }
     }
 
     pub fn learn_one(&mut self, x: &Observation, y: &ClassifierTarget) {
-
         self.classes.insert(y.clone());
 
         // Learning step
@@ -506,7 +512,7 @@ impl MondrianTreeClassifier {
 
     pub fn predict_proba_one(&self, x: &Observation) -> ClassProbabilities {
         if !self.is_initialised() {
-            return HashMap::new()
+            return HashMap::new();
         }
 
         let leaf_idx = self.find_leaf(x, self.root);
@@ -516,7 +522,7 @@ impl MondrianTreeClassifier {
         }
 
         // Initialization of the scores to output to 0
-        let mut scores= ClassProbabilities::new();
+        let mut scores = ClassProbabilities::new();
         for class in &self.classes {
             scores.insert(class.clone(), 0.);
         }
@@ -535,7 +541,8 @@ impl MondrianTreeClassifier {
                     let class_prediction = *predictions.get(&class).unwrap();
                     let class_score = *scores.get(&class).unwrap();
 
-                    let new_score = class_prediction * weight / 2. + (1. - weight / 2.) * class_score;
+                    let new_score =
+                        class_prediction * weight / 2. + (1. - weight / 2.) * class_score;
                     scores.insert(class.clone(), new_score);
                 }
             }
@@ -548,7 +555,7 @@ impl MondrianTreeClassifier {
         }
 
         // Normalize scores to mimic a probability distribution
-        return normalize_hashmap_values(&scores)
+        return normalize_hashmap_values(&scores);
     }
 
     pub fn print_tree(&self) {
@@ -562,16 +569,29 @@ impl MondrianTreeClassifier {
         print!("{}", if is_last { "└── " } else { "├── " });
 
         if let Some(split) = &node.split {
-            println!("Node {}: time: {:?}, min: {:?}, max: {:?}, {:?}", idx, node.time, node.memory_range_min.inner, node.memory_range_max.inner, split);
+            println!(
+                "Node {}: time: {:?}, min: {:?}, max: {:?}, {:?}",
+                idx, node.time, node.memory_range_min.inner, node.memory_range_max.inner, split
+            );
             let new_prefix = if is_last { "    " } else { "│   " };
-            self.print_node(split.left_child, &format!("{}{}", prefix, new_prefix), false);
-            self.print_node(split.right_child, &format!("{}{}", prefix, new_prefix), true);
+            self.print_node(
+                split.left_child,
+                &format!("{}{}", prefix, new_prefix),
+                false,
+            );
+            self.print_node(
+                split.right_child,
+                &format!("{}{}", prefix, new_prefix),
+                true,
+            );
         } else {
-            println!("Node {}: time: {:?}, min: {:?}, max: {:?}, Leaf", idx, node.time, node.memory_range_min.inner, node.memory_range_max.inner,);
+            println!(
+                "Node {}: time: {:?}, min: {:?}, max: {:?}, Leaf",
+                idx, node.time, node.memory_range_min.inner, node.memory_range_max.inner,
+            );
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -580,13 +600,7 @@ mod tests {
     #[test]
     fn test_update_depth() {
         // PARAMETERS
-        let mut tree = MondrianTreeClassifier::new(
-            0.1,
-            true,
-            0.5,
-            false,
-            Some(42),
-        );
+        let mut tree = MondrianTreeClassifier::new(0.1, true, 0.5, false, Some(42));
 
         let new_depth = 10;
         let node_idx = 0;
@@ -597,28 +611,31 @@ mod tests {
     #[test]
     fn test_update_count() {
         // PARAMETERS
-        let mut tree = MondrianTreeClassifier::new(
-            0.1,
-            true,
-            0.5,
-            false,
-            Some(42),
-        );
+        let mut tree = MondrianTreeClassifier::new(0.1, true, 0.5, false, Some(42));
 
         let node_idx = 0;
         let target_false = ClassifierTarget::Bool(false);
         let count_false = 1;
         tree.update_count(node_idx, &target_false);
-        assert_eq!(count_false, tree.nodes[node_idx].counts.count(&target_false));
+        assert_eq!(
+            count_false,
+            tree.nodes[node_idx].counts.count(&target_false)
+        );
 
         let count_false = 2;
         tree.update_count(node_idx, &target_false);
-        assert_eq!(count_false, tree.nodes[node_idx].counts.count(&target_false));
+        assert_eq!(
+            count_false,
+            tree.nodes[node_idx].counts.count(&target_false)
+        );
 
         let target_true = ClassifierTarget::Bool(true);
         let count_true = 1;
         tree.update_count(node_idx, &target_true);
         assert_eq!(count_true, tree.nodes[node_idx].counts.count(&target_true));
-        assert_eq!(count_false, tree.nodes[node_idx].counts.count(&target_false));
+        assert_eq!(
+            count_false,
+            tree.nodes[node_idx].counts.count(&target_false)
+        );
     }
 }

@@ -16,11 +16,7 @@ impl Accuracy {
 
 // implement for trait ClassificationMetric
 impl Accuracy {
-    pub fn update(
-        &mut self,
-        y_true: &ClassifierTarget,
-        y_pred: &ClassifierTarget,
-    ) {
+    pub fn update(&mut self, y_true: &ClassifierTarget, y_pred: &ClassifierTarget) {
         self.total_num += 1;
         if y_pred == y_true {
             self.matched_num += 1;
